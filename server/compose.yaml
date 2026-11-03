@@ -1,0 +1,20 @@
+services:
+  tap:
+    build: .
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:3080:3000"
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:?Set PUBLIC_URL in .env}
+      CHURCH_CENTER_URL: ${CHURCH_CENTER_URL:?Set CHURCH_CENTER_URL in .env}
+      PUBLISH_TOKEN: ${PUBLISH_TOKEN:?Set PUBLISH_TOKEN in .env}
+      HEARTBEAT_TTL_SECONDS: ${HEARTBEAT_TTL_SECONDS:-20}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
