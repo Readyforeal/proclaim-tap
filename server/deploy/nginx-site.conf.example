@@ -1,0 +1,17 @@
+# Optional complete site. Requires an existing certificate for this hostname.
+# Adjust certificate paths to match your server before enabling this file.
+server {
+    listen 80;
+    server_name tap.revivalomaha.org;
+    return 301 https://tap.revivalomaha.org$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name tap.revivalomaha.org;
+    ssl_certificate /etc/letsencrypt/live/tap.revivalomaha.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/tap.revivalomaha.org/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    include /etc/nginx/snippets/proclaim-tap.conf;
+}

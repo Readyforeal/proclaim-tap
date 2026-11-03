@@ -1,0 +1,24 @@
+[Unit]
+Description=Proclaim Tap redirect server
+After=network.target
+
+[Service]
+Type=simple
+User=proclaim-tap
+Group=proclaim-tap
+WorkingDirectory=/opt/proclaim-tap/server
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/proclaim-tap.env
+# Use the absolute path to your system-wide Node.js 22+ executable.
+ExecStart=/usr/bin/node /opt/proclaim-tap/server/src/main.js
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

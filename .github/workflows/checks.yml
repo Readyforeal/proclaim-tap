@@ -12,6 +12,23 @@ jobs:
           node-version: '22'
       - run: npm test
         working-directory: server
+      - name: Validate native Linux deployment configuration
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nginx
+          systemd-analyze verify server/deploy/proclaim-tap.service
+          deploy_check_dir=$(mktemp -d)
+          trap 'rm -rf "$deploy_check_dir"' EXIT
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -subj /CN=tap.revivalomaha.org \
+            -keyout "$deploy_check_dir/key.pem" -out "$deploy_check_dir/cert.pem" 2>/dev/null
+          sed \
+            -e "s|/etc/letsencrypt/live/tap.revivalomaha.org/fullchain.pem|$deploy_check_dir/cert.pem|" \
+            -e "s|/etc/letsencrypt/live/tap.revivalomaha.org/privkey.pem|$deploy_check_dir/key.pem|" \
+            -e "s|/etc/nginx/snippets/proclaim-tap.conf|$PWD/server/deploy/nginx-proclaim-tap.conf|" \
+            server/deploy/nginx-site.conf.example > "$deploy_check_dir/site.conf"
+          printf 'events {}\nhttp { include %s/site.conf; }\n' "$deploy_check_dir" > "$deploy_check_dir/nginx.conf"
+          sudo nginx -t -c "$deploy_check_dir/nginx.conf"
       - run: docker build -t proclaim-tap-test server
   companion:
     runs-on: macos-latest

@@ -4,7 +4,7 @@ A native macOS companion and self-hosted redirect server for Revival's presentat
 
 **[Server deployment instructions](server/README.md)** · **[Mac app downloads](https://github.com/Readyforeal/proclaim-tap/releases)**
 
-The companion requires macOS 13 or later. The distributable is a universal app for Apple silicon and Intel Macs; no Node, Python, or additional runtime is required on the booth Mac. The server runs with Docker Compose or Node.js 22+, with no npm dependencies or database.
+The companion requires macOS 13 or later. The distributable is a universal app for Apple silicon and Intel Macs; no Node, Python, or additional runtime is required on the booth Mac. The server runs directly on Node.js 22+ behind Nginx, with a supplied systemd service and no npm dependencies or database. Docker Compose is also available as an optional deployment.
 
 ## Open the companion
 
