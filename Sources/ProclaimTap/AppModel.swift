@@ -120,6 +120,8 @@ enum ConnectionState: String {
             cloudTask?.cancel()
             cloudTask = nil
             cloudLibrary = nil
+            presentation = nil
+            selectedItemID = nil
             cloudChecked = nil
             cloudError = nil
             cloudEditError = nil
@@ -407,7 +409,7 @@ enum ConnectionState: String {
             currentStatus = library.live.connected ? library.live.presentationStatus : nil
             serverConfirmedURL = library.live.destination
             serverMessage = library.live.connected ? "Presentation Mac connected · server destination confirmed" : "No fresh booth heartbeat · Church Center fallback"
-            connection = library.live.connected ? .live : .offAir
+            connection = currentStatus == nil ? .offAir : .live
             detail = "Remote editor · changes are saved to the server."
             let chosen = library.presentations.first(where: { $0.id == presentation?.id })
                 ?? library.presentations.first(where: { $0.id == library.live.presentationStatus?.presentationId })
@@ -421,6 +423,9 @@ enum ConnectionState: String {
         do {
             let library = try await serverClient.library(baseURL: base, token: publishToken)
             guard run == publishGeneration, !Task.isCancelled else { return }
+            guard library.revision >= (cloudLibrary?.revision ?? -1) else {
+                throw PublishError(message: "The server library is older than this Mac's cached copy. Save the server settings again to reconnect after a database restore.")
+            }
             acceptCloud(library)
             cloudError = nil
             if !cloudSaving && cloudEditError == nil { cloudMessage = "Links synced with server" }
