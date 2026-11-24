@@ -234,3 +234,33 @@ Run `npm test` to exercise redirects, cache headers, heartbeat renewal/expiry, f
 Cloud live updates use `protocolVersion: 2`, `onAir`, `forceFallback`, and `presentationStatus` in place of `activeURL`, alongside the same publisher ID, sequence and timestamp. The server checks the uploaded presentation revision, item and slide index before resolving its marker. Link edits do not extend the heartbeat lease.
 
 Library mutations require the latest `baseRevision`, an `operation` (`saveLink`, `deleteLink`, `importLinks`, or `savePresentation`), and the corresponding `rule`, `rules`, or `presentation`. Rules have `key`, `title` and `url`. Revision conflicts return 409 without saving any part of the mutation. Back up the database before a future schema migration; the 0.3.0 schema is the first persistent library.
+
+## Enable Mac app update downloads
+
+Version 0.5.0 adds authenticated update checks for the companion's download-and-replace flow. There is no database migration, Nginx change, or new npm dependency.
+
+On the server:
+
+```sh
+cd /opt/proclaim-tap
+git pull --ff-only origin main
+sudoedit /etc/proclaim-tap.env
+```
+
+Add `UPDATE_GITHUB_TOKEN` using a GitHub fine-grained personal access token with **Contents: Read-only**, restricted to **Readyforeal/proclaim-tap**. The account owning the token must have access to the private repository. Leave your existing publish/editor tokens and other settings in place. Do not copy this GitHub token into the Mac app or repository.
+
+```dotenv
+UPDATE_GITHUB_TOKEN=YOUR_READ_ONLY_REPOSITORY_TOKEN
+```
+
+Then restart and check the service:
+
+```sh
+sudo systemctl restart proclaim-tap
+sudo systemctl status proclaim-tap --no-pager
+curl -fsS https://tap.revivalomaha.org/healthz
+```
+
+In the Mac app, use **Settings → App updates → Check for updates**. Both publisher and editor device tokens are accepted. The server reads the latest stable GitHub release, caches metadata for one minute, and obtains short-lived download URLs. The archive comes directly from GitHub; the server does not relay the large ZIP or expose its GitHub token.
+
+Releases must include an uploaded universal **Proclaim-Tap.zip** with a GitHub SHA-256 digest. The app independently verifies the byte count and hash before showing the download in Finder. Drafts, prereleases, malformed versions, older versions, and incomplete assets are not offered. Missing update configuration returns a clear error and does not affect live redirects or cloud links. Renew the GitHub token when it expires.

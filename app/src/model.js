@@ -67,8 +67,11 @@ export class AppModel {
   }
 
   get isDemo() { return this.connection === 'Demo'; }
+  // Main-process use only; never included in view() or sent to the renderer.
+  updateConnection() { return { url: this.serverSettings.url, token: this.#publishToken }; }
   get usesCloud() { return this.allowPublishing && this.serverSettings.cloudEnabled && !this.isDemo; }
   get isRemoteEditor() { return !this.serverSettings.monitorLocal; }
+  get isLocalEditor() { return this.serverSettings.monitorLocal && !this.serverSettings.enabled; }
   get cloudFresh() { return within(this.cloudChecked, 10) && this.cloudError == null; }
   get publishingHealthy() { return this.serverSettings.enabled && this.serverError == null && within(this.lastPublished, 10); }
   get currentItem() {
@@ -339,7 +342,7 @@ export class AppModel {
       if (!this.cloudSaving && this.cloudEditError == null) this.cloudMessage = 'Links synced with server';
       // Only the booth uploads real snapshots. Browsing on a laptop never uploads its selection.
       const presentation = this.presentation;
-      if (this.isRemoteEditor || this.isDemo || !presentation || this.cloudSaving
+      if (!this.serverSettings.enabled || this.isRemoteEditor || this.isDemo || !presentation || this.cloudSaving
         || samePresentation(library.presentations.find(p => p.id === presentation.id), presentation)) return;
       this.cloudSaving = true;
       try {
@@ -411,7 +414,7 @@ export class AppModel {
     });
     const idle = { 'Off air': 'Ready for the next service', Paused: 'Monitoring paused', 'On air': 'Unknown presentation item' };
     return {
-      connection: this.connection, detail: this.detail, isDemo, isRemoteEditor, usesCloud, isMonitoring: this.isMonitoring,
+      connection: this.connection, detail: this.detail, isDemo, isRemoteEditor, isLocalEditor: this.isLocalEditor, usesCloud, isMonitoring: this.isMonitoring,
       syncRequested: this.syncRequested, forceFallback: this.forceFallback, lastChecked: this.lastChecked,
       presentation: presentation && { id: presentation.id, title: presentation.title },
       presentations: isRemoteEditor ? (this.cloudLibrary?.presentations ?? []).map(p => ({ id: p.id, title: p.title })) : [],

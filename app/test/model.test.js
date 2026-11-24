@@ -153,3 +153,38 @@ test('publisher and cloud catalog against the real server', async t => {
   assert.equal(live.destination, 'https://church.example/give');
   assert.deepEqual(live.presentationStatus, status);
 });
+
+test('local editor follows its own Proclaim, saves shared links, and never uploads or publishes', async t => {
+  const dir = tempDir(t);
+  writeFileSync(join(dir, 'server.json'), JSON.stringify({ url: 'https://tap.example.org', enabled: false, cloudEnabled: true, monitorLocal: true }));
+  const localPresentation = parsePresentation({ id: 'local-plan', title: 'Next week', localRevision: 1,
+    warmupStartIndex: 1, serviceStartIndex: 1, postServiceStartIndex: 1,
+    serviceItems: [{ id: 'giving', title: 'Giving [tap:giving]', kind: 'Content', slides: [{ index: 0 }] }] });
+  let library = { revision: 1, rules: [{ key: 'giving', title: 'Giving', url: 'https://church.example/old' }],
+    presentations: [], live: { connected: false, destination: 'https://church.example/', fallbackURL: 'https://church.example/', mode: 'fallback' } };
+  let publishes = 0, uploads = 0, saves = 0;
+  const model = new AppModel({ dir, loadToken: () => 'e'.repeat(32),
+    proclaim: { onAirSession: async () => 'a'.repeat(32), presentation: async () => localPresentation,
+      status: async () => ({ presentationId: 'local-plan', presentationLocalRevision: 1,
+        status: { revision: 1, itemId: 'giving', slideIndex: 0, quickScreenKind: 'None' } }) },
+    serverClient: { library: async () => library, publish: async () => { publishes++; },
+      updateLibrary: async (_base, _token, mutation) => {
+        if (mutation.operation === 'savePresentation') { uploads++; throw new Error('Editor cannot upload'); }
+        assert.equal(mutation.operation, 'saveLink'); saves++;
+        library = { ...library, revision: library.revision + 1, rules: [mutation.rule] }; return library;
+      } } });
+  t.after(() => model.shutdown());
+  model.start();
+  await waitFor('local plan and cloud links', () => model.presentation?.id === 'local-plan' && model.cloudFresh);
+  assert.equal(model.view().isLocalEditor, true);
+  assert.equal(model.view().isRemoteEditor, false);
+  model.setLink('https://church.example/new', 'giving', 'https://church.example/old');
+  await waitFor('saved cloud link', () => model.link('giving') === 'https://church.example/new');
+  // Give the periodic sync a chance to see a local plan absent from the cloud catalog.
+  await new Promise(resolve => setTimeout(resolve, 3200));
+  assert.equal(model.cloudError, null);
+  assert.equal(publishes, 0);
+  assert.equal(uploads, 0);
+  assert.equal(saves, 1);
+  assert.equal(model.presentation.id, 'local-plan');
+});

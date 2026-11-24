@@ -34,14 +34,17 @@ else
 fi
 
 npm ci
+version=$(node -p "require('./package.json').version")
 rm -rf ../dist
 npx electron-packager . "Proclaim Tap" --platform=darwin --arch="$arch" --out="$work/out" --asar \
-  --icon="$work/icon.icns" --app-bundle-id=org.revivalomaha.proclaim-tap --build-version=4 \
+  --icon="$work/icon.icns" --app-bundle-id=org.revivalomaha.proclaim-tap --build-version="$version" \
   --ignore='^/(test|build)($|/)'
 mkdir -p ../dist
 mv "$work/out/Proclaim Tap-darwin-$arch/Proclaim Tap.app" ../dist/
 app="$PWD/../dist/Proclaim Tap.app"
 
 codesign --force --deep --sign - "$app"
+codesign --verify --deep --strict "$app"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$PWD/../dist/Proclaim-Tap.zip"
+(cd ../dist && shasum -a 256 Proclaim-Tap.zip > SHA256SUMS.txt)
 echo "Built: $app"

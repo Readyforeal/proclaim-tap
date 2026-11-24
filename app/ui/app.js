@@ -22,12 +22,20 @@ const call = async (name, ...args) => render(await window.tap.call(name, ...args
 function render(next) {
   state = next;
   const s = state, booth = !s.isRemoteEditor;
+  const u = s.updates;
+  $('update-version').textContent = `Installed version ${u.currentVersion}`;
+  $('update-message').textContent = u.message;
+  $('update-message').classList.toggle('error', u.status === 'error');
+  $('update-check').disabled = ['checking', 'downloading'].includes(u.status);
+  $('update-download').hidden = u.status !== 'available';
+  $('update-reveal').hidden = u.status !== 'manual-ready';
 
   // Toolbar
   const tone = s.connection === 'On air' ? 'live' : ['Demo', 'Connecting'].includes(s.connection) ? 'warn' : '';
   $('status').textContent = s.connection;
   $('status').dataset.tone = tone;
-  $('role-label').hidden = booth;
+  $('role-label').hidden = booth && !s.isLocalEditor;
+  $('role-label').textContent = s.isLocalEditor ? 'Local editor' : 'Remote editor';
   $('monitor').hidden = !booth;
   paint($('monitor'), s.isMonitoring ? `${icon('pause')}Pause` : `${icon('play')}Connect to Proclaim`);
   $('monitor').classList.toggle('btn-primary', !s.isMonitoring);
@@ -63,13 +71,13 @@ function render(next) {
   paint(target, `
     ${icon(d.isFallback ? 'home' : 'link')}
     <div class="body">
-      <div class="split"><span class="eyebrow">A tap opens</span><span class="badge" data-tone="${d.healthy ? 'ok' : ''}">${esc(d.badge)}</span></div>
+      <div class="split"><span class="eyebrow">${s.isLocalEditor ? 'Local preview · not publishing' : 'A tap opens'}</span><span class="badge" data-tone="${d.healthy ? 'ok' : ''}">${esc(d.badge)}</span></div>
       <h3 class="title">${esc(d.isFallback ? 'Church Center' : d.reason)}</h3>
       <p class="mono url selectable">${esc(d.url ?? 'Add your Church Center URL in Settings')}</p>
       ${d.isFallback ? `<p class="caption">${esc(d.reason)}</p>` : ''}
     </div>
     ${d.url ? `<button class="btn btn-icon" data-action="open" data-url="${esc(d.url)}" aria-label="Open this link in your browser" title="Open this link in your browser">${icon('open')}</button>` : ''}`);
-  $('force-row').hidden = !booth;
+  $('force-row').hidden = !booth || s.isLocalEditor;
   $('force').checked = s.forceFallback;
   paint($('server-notes'), notes([[s.serverMessage], [s.serverError, true], [d.confirmedURL && `Last confirmed: ${d.confirmedURL}`]]));
 
@@ -140,7 +148,7 @@ function validateEditor() {
 
 function openSettings() {
   const { settings, fallbackURL } = state;
-  document.querySelector(`[name="role"][value="${settings.monitorLocal ? 'booth' : 'editor'}"]`).checked = true;
+  document.querySelector(`[name="role"][value="${!settings.monitorLocal ? 'editor' : settings.enabled ? 'booth' : 'local-editor'}"]`).checked = true;
   $('set-url').value = settings.url;
   $('set-token').value = '';
   $('set-cloud').checked = settings.cloudEnabled;
@@ -148,17 +156,18 @@ function openSettings() {
   $('set-fallback').value = fallbackURL;
   $('set-error').hidden = $('set-fallback-error').hidden = true;
   syncRole();
-  $('settings').showModal();
+  if (!$('settings').open) $('settings').showModal();
 }
-// A remote editor always syncs and never publishes.
+// Both editor roles sync links, but only the presentation role publishes live state.
 function syncRole() {
-  const editor = document.querySelector('[name="role"]:checked').value === 'editor';
+  const editor = document.querySelector('[name="role"]:checked').value !== 'booth';
   if (editor) { $('set-cloud').checked = true; $('set-publish').checked = false; }
+  else $('set-publish').checked = true;
   $('set-cloud').disabled = $('set-publish').disabled = editor;
 }
 async function saveServer() {
   await call('configureServer', { url: $('set-url').value, token: $('set-token').value, enabled: $('set-publish').checked,
-    cloudEnabled: $('set-cloud').checked, monitorLocal: document.querySelector('[name="role"]:checked').value === 'booth' });
+    cloudEnabled: $('set-cloud').checked, monitorLocal: document.querySelector('[name="role"]:checked').value !== 'editor' });
   $('set-error').hidden = !state.serverError;
   $('set-error').textContent = state.serverError ?? '';
   if (!state.serverError) $('set-token').value = '';
@@ -182,6 +191,9 @@ const actions = {
   },
   import: () => call('importLinks'),
   export: () => call('exportProfile'),
+  'check-updates': () => call('checkUpdates'),
+  'download-update': () => call('downloadUpdate'),
+  'show-download': () => call('showDownload'),
 };
 document.addEventListener('click', event => {
   const el = event.target.closest('[data-action]');
@@ -206,4 +218,5 @@ $('list').addEventListener('keydown', event => {
 });
 
 window.tap.onState(render);
+window.tap.onShowSettings(() => { if (state) openSettings(); });
 call('view');

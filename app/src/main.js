@@ -3,11 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppModel } from './model.js';
 import { validURL } from './core.js';
+import { UpdateController } from './updates.js';
 
 // Two companions on one Mac would fight over the server's publishing lease.
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let win, model, lastSent = '';
+let win, model, updater, lastSent = '';
+const view = () => ({ ...model.view(), updates: updater.view() });
 
 // The device token is encrypted with a key held in the macOS Keychain; only the ciphertext is on disk.
 const tokenFile = () => path.join(app.getPath('userData'), 'token.bin');
@@ -42,12 +44,15 @@ const actions = {
   showDemo: () => model.showDemo(),
   showDemoItem: id => model.showDemoItem(String(id)),
   exportProfile,
+  checkUpdates: () => updater.check(),
+  downloadUpdate: () => updater.downloadUpdate(),
+  showDownload: () => updater.revealDownload(),
   open: url => { if (validURL(url)) shell.openExternal(url); },
 };
 
 function push() {
   if (!win || win.isDestroyed()) return;
-  const state = JSON.stringify(model.view());
+  const state = JSON.stringify(view());
   if (state === lastSent) return;
   lastSent = state;
   win.webContents.send('state', JSON.parse(state));
@@ -55,13 +60,21 @@ function push() {
 
 app.whenReady().then(() => {
   model = new AppModel({ dir: app.getPath('userData'), loadToken, saveToken });
+  updater = new UpdateController({ currentVersion: app.getVersion(), connection: () => model.updateConnection(),
+    packaged: app.isPackaged,
+    downloadDirectory: app.getPath('downloads'), reveal: file => shell.showItemInFolder(file) });
   ipcMain.handle('tap', async (event, name, ...args) => {
     if (event.sender !== win?.webContents || !Object.hasOwn(actions, name)) throw new Error('Unknown action');
     await actions[name](...args);
-    return model.view();
+    return view();
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { role: 'appMenu' }, { role: 'editMenu' },
+    { label: app.name, submenu: [
+      { role: 'about' },
+      { label: 'Check for Updates…', click: () => { win.webContents.send('show-settings'); updater.check(); } },
+      { type: 'separator' }, { role: 'services' }, { type: 'separator' },
+      { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' },
+    ] }, { role: 'editMenu' },
     { label: 'Presentation', submenu: [
       { label: 'Sync Presentation', accelerator: 'CmdOrCtrl+R', click: () => { if (model.isMonitoring) model.sync(); } },
       { label: 'Export Link Mappings…', click: exportProfile },

@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { LinkLibrary, LibraryError } from './library.js';
+import { ReleaseUpdates, UpdateError } from './updates.js';
 
 export function httpsURL(value, name = 'URL') {
   if (typeof value !== 'string' || value.length > 4096 || /[\r\n]/.test(value)) throw new Error(`Invalid ${name}`);
@@ -22,7 +23,7 @@ export function configuration(env = process.env) {
   const port = Number(env.PORT ?? 3000);
   if (!Number.isInteger(ttlSeconds) || ttlSeconds < 10 || ttlSeconds > 120) throw new Error('HEARTBEAT_TTL_SECONDS must be 10–120');
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
-  return { publicURL, fallbackURL, token, editorToken, ttlSeconds, port, host: env.HOST ?? '127.0.0.1' };
+  return { publicURL, fallbackURL, token, editorToken, ttlSeconds, port, host: env.HOST ?? '127.0.0.1', updateToken: env.UPDATE_GITHUB_TOKEN || '' };
 }
 
 const digest = value => createHash('sha256').update(value).digest();
@@ -47,7 +48,7 @@ async function jsonBody(req, limit = 16384) {
 }
 
 // One process owns the short-lived live state. A restart intentionally restores fallback.
-export function createTapServer(config, { now = Date.now, library = new LinkLibrary() } = {}) {
+export function createTapServer(config, { now = Date.now, library = new LinkLibrary(), updates = new ReleaseUpdates({ token: config.updateToken }) } = {}) {
   const expectedAuth = digest(`Bearer ${config.token}`);
   const editorAuth = config.editorToken ? digest(`Bearer ${config.editorToken}`) : null;
   let state = null;
@@ -91,12 +92,19 @@ export function createTapServer(config, { now = Date.now, library = new LinkLibr
         send(200, { ok: true });
         return;
       }
-      if (!['/api/state', '/api/library'].includes(path)) { send(404, { error: 'Not found' }); return; }
+      if (!['/api/state', '/api/library', '/api/updates', '/api/updates/download'].includes(path)) { send(404, { error: 'Not found' }); return; }
       const suppliedAuth = digest(req.headers.authorization ?? '');
       const isPublisher = timingSafeEqual(suppliedAuth, expectedAuth);
       const isEditor = editorAuth && timingSafeEqual(suppliedAuth, editorAuth);
       if (!isPublisher && !isEditor) {
         send(401, { error: 'Unauthorized' }); return;
+      }
+      if (path.startsWith('/api/updates')) {
+        if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); send(405, { error: 'Method not allowed' }); return; }
+        res.setTimeout(25000);
+        const params = new URL(req.url, 'http://local.invalid').searchParams;
+        send(200, path === '/api/updates' ? await updates.check(params.get('current')) : await updates.download(params.get('version')));
+        return;
       }
       if (path === '/api/library') {
         if (req.method === 'GET') { send(200, { ...library.snapshot(), live: snapshot() }); return; }
@@ -147,8 +155,8 @@ export function createTapServer(config, { now = Date.now, library = new LinkLibr
         protocolVersion: body.protocolVersion, onAir: body.onAir, forceFallback: body.forceFallback, expiresAt: now() + config.ttlSeconds * 1000 };
       send(200, snapshot());
     } catch (error) {
-      if (!res.headersSent && !res.destroyed) send(error instanceof HTTPError || error instanceof LibraryError ? error.code : 500,
-        { error: error instanceof HTTPError || error instanceof LibraryError ? error.message : 'Internal server error' });
+      if (!res.headersSent && !res.destroyed) send(error instanceof HTTPError || error instanceof LibraryError || error instanceof UpdateError ? error.code : 500,
+        { error: error instanceof HTTPError || error instanceof LibraryError || error instanceof UpdateError ? error.message : 'Internal server error' });
     }
   });
   server.once('close', () => library.close());

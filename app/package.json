@@ -1,7 +1,7 @@
 {
   "name": "proclaim-tap",
   "productName": "Proclaim Tap",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Presentation-aware NFC link companion for Proclaim",
   "private": true,
   "type": "module",

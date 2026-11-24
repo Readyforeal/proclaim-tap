@@ -101,12 +101,25 @@
     <header class="sheet-head"><h2 id="settings-title" class="title">Settings</h2></header>
     <div class="sheet-body">
       <section class="group">
+        <h3 class="eyebrow">App updates</h3>
+        <p id="update-version" class="caption"></p>
+        <p id="update-message" class="caption" role="status" aria-live="polite"></p>
+        <p id="update-manual" class="caption">Downloads are verified and shown in Finder. Replace the app when you are ready; checking never interrupts a service.</p>
+        <div class="row-actions">
+          <button id="update-check" class="btn" type="button" data-action="check-updates">Check for updates</button>
+          <button id="update-download" class="btn btn-primary" type="button" data-action="download-update" hidden>Download update</button>
+          <button id="update-reveal" class="btn" type="button" data-action="show-download" hidden>Show in Finder</button>
+        </div>
+      </section>
+      <section class="group">
         <h3 class="eyebrow">This Mac</h3>
         <div class="segmented" role="radiogroup" aria-label="This Mac">
           <label><input type="radio" name="role" value="booth"><span>Presentation Mac</span></label>
+          <label><input type="radio" name="role" value="local-editor"><span>Local editor</span></label>
           <label><input type="radio" name="role" value="editor"><span>Remote editor</span></label>
         </div>
-        <p class="caption">The presentation Mac runs Proclaim and reports the live slide. A remote editor only edits shared links.</p>
+        <p class="caption">Presentation Mac controls live taps. Local editor follows Proclaim on this Mac without publishing. Remote editor browses presentations uploaded by the presentation Mac.</p>
+        <p class="caption">For local editing, enable Proclaim Settings → Remote and put your local presentation On Air. Shared marker links apply everywhere, so editing a marker already live upstairs changes its destination too.</p>
       </section>
       <section class="group">
         <h3 class="eyebrow">Redirect server</h3>
