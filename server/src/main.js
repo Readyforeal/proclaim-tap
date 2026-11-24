@@ -1,8 +1,11 @@
+import { LinkLibrary } from './library.js';
+import { resolve } from 'node:path';
 import { configuration, createTapServer } from './server.js';
 
 try {
   const config = configuration();
-  const server = createTapServer(config);
+  const library = new LinkLibrary(resolve(process.env.DATA_DIR || 'data', 'links.sqlite'));
+  const server = createTapServer(config, { library });
   server.listen(config.port, config.host, () => {
     console.log(`Proclaim Tap listening on ${config.host}:${config.port}; heartbeat expiry ${config.ttlSeconds}s`);
   });

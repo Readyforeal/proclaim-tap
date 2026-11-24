@@ -132,6 +132,16 @@ final class MockURLProtocol: URLProtocol {
         catch { authRejected = true }
         try check(authRejected, "Rejected publish must not be confirmed")
         print("PASS: publisher payload, authentication, fallback null and acknowledgement")
+        try check(TapMarker.key(in: "Giving [tap:giving]") == "giving", "Marker detection")
+        try check(TapMarker.key(in: "New title [TAP:CONFERENCE-2026]") == "conference-2026", "Marker identity survives title changes")
+        for title in ["Giving", "[tap:]", "[tap:has space]", "[tap:one] [tap:two]", "[tap:one] [tap:broken", "[tap:évent]"] {
+            try check(TapMarker.key(in: title) == nil, "Malformed or ambiguous marker: \(title)")
+        }
+        let liveUpdate = LiveUpdate(publisherId: "test-publisher-0001", sequence: 2, status: try status(), forceFallback: false)
+        let livePayload = try JSONSerialization.jsonObject(with: JSONEncoder().encode(liveUpdate)) as! [String: Any]
+        try check(livePayload["protocolVersion"] as? Int == 2 && livePayload["onAir"] as? Bool == true, "Cloud live protocol")
+        try check(livePayload["activeURL"] == nil && livePayload["presentationStatus"] != nil, "Cloud reports slide identity for server routing")
+        print("PASS: explicit markers, invalid/ambiguous markers and cloud live protocol")
         print("All checks passed.")
     }
 }

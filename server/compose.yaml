@@ -9,7 +9,10 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:?Set PUBLIC_URL in .env}
       CHURCH_CENTER_URL: ${CHURCH_CENTER_URL:?Set CHURCH_CENTER_URL in .env}
       PUBLISH_TOKEN: ${PUBLISH_TOKEN:?Set PUBLISH_TOKEN in .env}
+      EDITOR_TOKEN: ${EDITOR_TOKEN:-}
       HEARTBEAT_TTL_SECONDS: ${HEARTBEAT_TTL_SECONDS:-20}
+    volumes:
+      - tap_data:/app/data
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -18,3 +21,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  tap_data:

@@ -58,6 +58,10 @@ struct ContentView: View {
                         liveCard
                         destinationCard
                         editor
+                        if model.usesCloud {
+                            Text(model.cloudMessage).font(.callout).foregroundStyle(.secondary)
+                            if let error = model.cloudEditError ?? model.cloudError { Text(error).font(.callout).foregroundStyle(.red).textSelection(.enabled) }
+                        }
                         if let error = model.storageError {
                             Label(error, systemImage: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.red).font(.callout)
@@ -85,14 +89,16 @@ struct ContentView: View {
                 Circle().fill(statusColor).frame(width: 7, height: 7)
                 Text(model.connection.rawValue).font(.callout.weight(.medium))
             }.padding(.horizontal, 12).padding(.vertical, 7).background(statusColor.opacity(0.12), in: Capsule())
-            if model.isMonitoring {
+            if model.isRemoteEditor {
+                Text("Remote editor").font(.callout).foregroundStyle(.secondary)
+            } else if model.isMonitoring {
                 Button("Pause", systemImage: "pause.fill") { model.stop() }
             } else {
                 Button("Connect to Proclaim", systemImage: "antenna.radiowaves.left.and.right") { model.start() }
                     .buttonStyle(.borderedProminent)
             }
             Button { showSettings = true } label: { Image(systemName: "gearshape") }
-                .help("Church Center and saved mappings")
+                .help("Server connection, cloud links, and device role")
         }.padding(.horizontal, 24).padding(.vertical, 18)
     }
 
@@ -106,7 +112,12 @@ struct ContentView: View {
                         Label(model.syncRequested ? "Syncing…" : "Sync", systemImage: "arrow.triangle.2.circlepath")
                     }.disabled(!model.isMonitoring || model.connection == .offAir || model.syncRequested)
                 }
-                Text(model.presentation?.title ?? "Waiting for Proclaim").font(.title3.weight(.semibold))
+                if model.isRemoteEditor, let cloud = model.cloudLibrary, !cloud.presentations.isEmpty {
+                    Picker("Presentation", selection: Binding(get: { model.presentation?.id ?? "" }, set: { model.chooseCloudPresentation($0) })) {
+                        ForEach(cloud.presentations, id: \.id) { p in Text(p.title).tag(p.id) }
+                    }
+                }
+                Text(model.presentation?.title ?? (model.isRemoteEditor ? "Waiting for the presentation Mac" : "Waiting for Proclaim")).font(.title3.weight(.semibold))
                 HStack(spacing: 5) {
                     Text("\(model.visibleItems.count) items")
                     Text("·")
@@ -123,9 +134,9 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Image(systemName: "rectangle.on.rectangle.slash").font(.largeTitle).foregroundStyle(.secondary)
                     Text("Bring your service into view").font(.headline)
-                    Text("On this Mac, open Proclaim, enable Settings → Remote, and go On Air. Your presentation will sync automatically.")
+                    Text(model.isRemoteEditor ? "Connect to the server in Settings. Presentations appear after the booth Mac uploads them; you can edit uploaded presentations while that Mac is off." : "On this Mac, open Proclaim, enable Settings → Remote, and go On Air. Your presentation will sync automatically.")
                         .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    Button("Explore a sample presentation") { model.showDemo() }
+                    if !model.isRemoteEditor { Button("Explore a sample presentation") { model.showDemo() } }
                 }.padding(24)
                 Spacer()
             } else {
@@ -138,6 +149,10 @@ struct ContentView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(item.title).font(.system(size: 13, weight: .medium))
                                 Text(model.section(for: item)).font(.caption).foregroundStyle(.secondary)
+                                if model.usesCloud, item.title.lowercased().contains("[tap:"), model.link(for: item.id).isEmpty {
+                                    Text(TapMarker.key(in: item.title) == nil ? "Check tap marker" : "Tap link needed")
+                                        .font(.caption).foregroundStyle(.orange)
+                                }
                             }
                             Spacer()
                             if Routing.validURL(model.link(for: item.id)) != nil {
@@ -161,7 +176,7 @@ struct ContentView: View {
             }
             Text(liveTitle).font(.system(size: 32, weight: .semibold)).lineLimit(2)
             if let item = model.currentItem {
-                Text(model.section(for: item)).font(.callout).foregroundStyle(.secondary)
+                Text(model.isRemoteEditor ? (model.cloudLibrary?.presentations.first(where: { $0.id == model.currentStatus?.presentationId })?.title ?? "") : model.section(for: item)).font(.callout).foregroundStyle(.secondary)
             }
             Text(model.detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }.frame(maxWidth: .infinity, alignment: .leading)
@@ -186,7 +201,7 @@ struct ContentView: View {
             HStack {
                 eyebrow("TAP DESTINATION PREVIEW")
                 Spacer()
-                Text(model.publishingHealthy ? "PUBLISHING" : (model.serverSettings.enabled ? "NOT CONFIRMED" : "LOCAL ONLY"))
+                Text(model.isRemoteEditor ? (model.cloudFresh ? "SERVER STATUS" : "NOT CONFIRMED") : (model.publishingHealthy ? "PUBLISHING" : (model.serverSettings.enabled ? "NOT CONFIRMED" : "LOCAL ONLY")))
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .padding(5).background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
             }
@@ -209,13 +224,13 @@ struct ContentView: View {
                 }
             }
             Divider().padding(.vertical, 3)
-            Toggle("Use Church Center for every tap", isOn: $model.forceFallback).toggleStyle(.switch)
+            if !model.isRemoteEditor { Toggle("Use Church Center for every tap", isOn: $model.forceFallback).toggleStyle(.switch) }
             Text(model.serverMessage)
                 .font(.caption).foregroundStyle(.secondary)
             if let error = model.serverError {
                 Text(error).font(.caption).foregroundStyle(.red)
             }
-            if model.serverSettings.enabled, let confirmed = model.serverConfirmedURL {
+            if model.serverSettings.enabled || model.isRemoteEditor, let confirmed = model.serverConfirmedURL {
                 Text("Last confirmed: \(confirmed)").font(.caption).foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
@@ -237,9 +252,13 @@ struct ContentView: View {
                         Button("Show in demo") { model.showDemoItem(item.id) }
                     }
                 }
-                LinkEditor(value: model.link(for: item.id)) { model.setLink($0, itemId: item.id) }
+                LinkEditor(value: model.link(for: item.id)) { value, previous in model.setLink(value, itemId: item.id, expectedURL: previous) }
+                    .disabled(model.usesCloud && (TapMarker.key(in: item.title) == nil || model.cloudSaving || !model.cloudFresh))
                     .id("\(model.presentation?.id ?? "")/\(item.id)")
-                Text("Leave empty to use Church Center. This link applies to every slide in this item. Each copy in the service has its own mapping.")
+                Text(model.usesCloud
+                    ? (TapMarker.key(in: item.title).map { "[tap:\($0)] · This URL applies to every item using this marker, including future weekly duplicates. Clearing it removes the shared link everywhere." }
+                       ?? "Add exactly one marker such as [tap:giving] to this item's title in Proclaim. Unmarked items use Church Center.")
+                    : "Leave empty to use Church Center. This local link applies to every slide in this item; each copy has its own mapping.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -248,7 +267,7 @@ struct ContentView: View {
     private var footer: some View {
         HStack(spacing: 8) {
             Image(systemName: "desktopcomputer")
-            Text("Proclaim on this Mac · 127.0.0.1:52195")
+            Text(model.isRemoteEditor ? "Remote editor · \(model.serverSettings.url)" : "Proclaim on this Mac · 127.0.0.1:52195")
             Spacer()
             if let checked = model.lastChecked {
                 Text("Last response")
@@ -263,24 +282,29 @@ struct ContentView: View {
 
 struct LinkEditor: View {
     let value: String
-    let save: (String) -> Void
+    let save: (String, String) -> Void
     @State private var draft = ""
-    @State private var didSave = false
+    @State private var baseline = ""
     private var isValid: Bool { draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || Routing.validURL(draft) != nil }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 TextField("https://…", text: $draft).textFieldStyle(.roundedBorder)
-                    .onSubmit { commit() }.onChange(of: draft) { _ in didSave = false }
-                Button(didSave ? "Saved" : "Save link") { commit() }.disabled(!isValid)
+                    .onSubmit { commit() }
+                Button("Save link") { commit() }.disabled(!isValid)
             }
             if !isValid { Text("Enter a full HTTPS link, or leave this empty.").font(.caption).foregroundStyle(.red) }
-        }.onAppear { draft = value }
+            if draft != value {
+                Button("Reload saved link") { draft = value; baseline = value }.font(.caption)
+            }
+        }.onAppear { draft = value; baseline = value }
+            .onChange(of: value) { newValue in
+                if draft == baseline || draft == newValue { draft = newValue; baseline = newValue }
+            }
     }
     private func commit() {
         guard isValid else { return }
-        save(draft)
-        didSave = true
+        save(draft, baseline)
     }
 }
 
@@ -290,24 +314,33 @@ struct SettingsView: View {
     @State private var serverURL = ""
     @State private var serverToken = ""
     @State private var publishing = false
+    @State private var cloudEnabled = true
+    @State private var monitorLocal = true
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 22) {
             Text("Companion settings").font(.title2.bold())
             VStack(alignment: .leading, spacing: 9) {
                 Text("Redirect server").font(.headline)
                 TextField("https://tap.revivalomaha.org", text: $serverURL).textFieldStyle(.roundedBorder)
-                SecureField("Publish token · leave blank to keep saved token", text: $serverToken)
+                SecureField("Device token · leave blank to keep saved token", text: $serverToken)
                     .textFieldStyle(.roundedBorder)
-                Toggle("Publish live destinations", isOn: $publishing)
+                Picker("This Mac", selection: $monitorLocal) {
+                    Text("Presentation Mac").tag(true)
+                    Text("Remote editor").tag(false)
+                }.pickerStyle(.segmented)
+                    .onChange(of: monitorLocal) { local in if !local { cloudEnabled = true; publishing = false } }
+                Toggle("Sync links and presentations with server", isOn: $cloudEnabled).disabled(!monitorLocal)
+                Toggle("Publish live destinations", isOn: $publishing).disabled(!monitorLocal)
                 HStack {
                     Button("Save server settings") {
-                        model.configureServer(url: serverURL, token: serverToken, enabled: publishing)
+                        model.configureServer(url: serverURL, token: serverToken, enabled: publishing, cloudEnabled: cloudEnabled, monitorLocal: monitorLocal)
                         if model.serverError == nil { serverToken = "" }
                     }
                     Text("Token stored in macOS Keychain").font(.caption).foregroundStyle(.secondary)
                 }
                 if let error = model.serverError { Text(error).font(.caption).foregroundStyle(.red) }
-                Text("The server's CHURCH_CENTER_URL controls the public fallback. Updates are sent when the destination changes, with a heartbeat every five seconds. Demo slides are never published.")
+                Text("Use the publish token on the presentation Mac and an editor token on your laptop. Cloud links follow [tap:marker] in Proclaim item titles. The server owns the Church Center fallback.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Divider()
@@ -315,7 +348,7 @@ struct SettingsView: View {
                 Text("Local Church Center preview").font(.headline)
                 Text("Used before connecting a server. Once connected, the preview uses the server's fallback address.")
                     .font(.callout).foregroundStyle(.secondary)
-                LinkEditor(value: model.profile.fallbackURL) { model.setFallback($0) }
+                LinkEditor(value: model.profile.fallbackURL) { value, _ in model.setFallback(value) }
             }
             Divider()
             VStack(alignment: .leading, spacing: 8) {
@@ -326,12 +359,23 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Divider()
+            if model.usesCloud {
+                Text(model.cloudMessage).font(.caption)
+                if let error = model.cloudEditError ?? model.cloudError { Text(error).font(.caption).foregroundStyle(.red) }
+                Button("Import local links for this presentation") { model.importCurrentLocalLinks() }
+                    .disabled(model.cloudSaving || !model.cloudFresh || model.isRemoteEditor)
+                Text("First add markers to your existing Proclaim items. Import copies their local links to the server and rejects conflicting marker assignments.").font(.caption).foregroundStyle(.secondary)
+            }
             HStack {
-                Button("Export link mappings…") { model.exportProfile() }
+                Button("Export local link mappings…") { model.exportProfile() }
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
-        }.padding(28).frame(width: 560)
-            .onAppear { serverURL = model.serverSettings.url; publishing = model.serverSettings.enabled }
+        }.padding(28)
+        }.frame(width: 600, height: 680)
+            .onAppear {
+                serverURL = model.serverSettings.url; publishing = model.serverSettings.enabled
+                cloudEnabled = model.serverSettings.cloudEnabled; monitorLocal = model.serverSettings.monitorLocal
+            }
     }
 }

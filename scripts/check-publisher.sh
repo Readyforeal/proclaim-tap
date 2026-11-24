@@ -8,12 +8,14 @@ binary_dir=$(swift build --disable-sandbox --show-bin-path)
 swiftc -parse-as-library -target "$(uname -m)-apple-macosx13.0" \
   -I "$binary_dir/Modules" scripts/PublishChecks.swift \
   "$binary_dir/TapCore.build/ServerClient.swift.o" \
+  "$binary_dir/TapCore.build/Models.swift.o" \
   -o "$PWD/.build/PublishChecks"
 export PUBLIC_URL=https://tap.example.org
 export CHURCH_CENTER_URL=https://church.example/
 export PUBLISH_TOKEN
 PUBLISH_TOKEN=$(openssl rand -hex 32)
 export PORT=3099 HOST=127.0.0.1
+export DATA_DIR="$PWD/.build/publisher-data"
 node server/src/main.js > .build/publisher-test-server.log 2>&1 &
 test_server_pid=$!
 trap 'kill "$test_server_pid" 2>/dev/null || true' EXIT

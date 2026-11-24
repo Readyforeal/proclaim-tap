@@ -28,5 +28,19 @@ struct IntegrationFailure: Error { let message: String }
         } catch { rejected = true }
         guard rejected else { throw IntegrationFailure(message: "Bad token was accepted") }
         print("PASS: live publisher authentication failure")
+        let raw = #"{"id":"cloud-fixture","localRevision":1,"title":"Cloud fixture","warmupStartIndex":0,"serviceStartIndex":0,"postServiceStartIndex":1,"serviceItems":[{"id":"giving","title":"Giving [tap:giving]","kind":"Content","slides":[{"index":0}]}]}"#
+        let presentation = try JSONDecoder().decode(Presentation.self, from: Data(raw.utf8))
+        var library = try await client.library(baseURL: base, token: token)
+        library = try await client.updateLibrary(baseURL: base, token: token,
+            mutation: LibraryMutation(baseRevision: library.revision, operation: "savePresentation", presentation: presentation))
+        library = try await client.updateLibrary(baseURL: base, token: token,
+            mutation: LibraryMutation(baseRevision: library.revision, operation: "saveLink", rule: CloudRule(key: "giving", title: "Giving", url: "https://church.example/give")))
+        guard library.link(for: presentation.serviceItems[0]) == "https://church.example/give" else { throw IntegrationFailure(message: "Cloud link round trip failed") }
+        let statusRaw = #"{"presentationId":"cloud-fixture","presentationLocalRevision":1,"status":{"revision":1,"itemId":"giving","slideIndex":0,"quickScreenKind":"None"}}"#
+        let status = try JSONDecoder().decode(PresentationStatus.self, from: Data(statusRaw.utf8))
+        let live = try await client.publishLive(baseURL: base, token: token,
+            update: LiveUpdate(publisherId: id, sequence: 4, status: status, forceFallback: false))
+        guard live.destination == "https://church.example/give", live.presentationStatus == status else { throw IntegrationFailure(message: "Server did not resolve cloud slide") }
+        print("PASS: Swift cloud catalog → Node SQLite → live marker resolution")
     }
 }

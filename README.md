@@ -4,27 +4,50 @@ A native macOS companion and self-hosted redirect server for Revival's presentat
 
 **[Server deployment instructions](server/README.md)** · **[Mac app downloads](https://github.com/Readyforeal/proclaim-tap/releases)**
 
-The companion requires macOS 13 or later. The distributable is a universal app for Apple silicon and Intel Macs; no Node, Python, or additional runtime is required on the booth Mac. The server runs directly on Node.js 22+ behind Nginx, with a supplied systemd service and no npm dependencies or database. Docker Compose is also available as an optional deployment.
+The companion requires macOS 13 or later. The distributable is a universal app for Apple silicon and Intel Macs; no Node, Python, or additional runtime is required on the booth Mac. The server runs directly on Node.js 22.13+ behind Nginx, with a supplied systemd service, SQLite persistence, and no npm dependencies. Docker Compose is also available as an optional deployment.
 
-## Open the companion
+## Set up cloud links (0.3.0)
 
-1. Copy `dist/Proclaim Tap.app` to the Mac that runs Proclaim (Applications is a convenient destination).
-2. In Proclaim, enable **Settings → Remote**, open a presentation, and go **On Air**.
-3. Open **Proclaim Tap**. It connects and fetches the on-air presentation automatically.
-4. Deploy the server using its README. In the gear menu, enter its HTTPS URL and publish token, enable publishing, and save the server settings.
-5. Select an item, enter its HTTPS destination, and click **Save link**. Each mapping covers all slides in that item.
+Upgrade the server first using the [cloud upgrade instructions](server/README.md#upgrade-an-existing-native-installation-to-030). The database lives on your existing server; Docker is optional. The server requires Node.js **22.13 or later** for its bundled SQLite support.
 
-The current item updates without pressing Sync. **Sync** explicitly reloads the presentation; changes to its revision also trigger a reload automatically. The item list stays available for editing when the connection drops. The live preview clears on failure, pause, or off-air detection. **Explore a sample presentation** works without Proclaim; its mappings use a separate demo presentation ID.
+1. Download **Proclaim Tap 0.3.0** from Releases and copy it to Applications on each Mac.
+2. On the presentation Mac, enable Proclaim **Settings → Remote**, open your presentation and go **On Air**.
+3. In Proclaim Tap's gear menu, set the HTTPS server URL and publish token. Choose **Presentation Mac**, enable **Sync links and presentations with server** and **Publish live destinations**, then save.
+4. In Proclaim, add one marker to each linked item's title, for example `Giving [tap:giving]` or `Conference [tap:conference-2026]`.
+5. Select that item in Proclaim Tap, enter its HTTPS URL and save. The app confirms the save only after the server accepts it.
+6. On your laptop, use the same server URL and its separate editor token. Choose **Remote editor**, enable cloud sync, and save. Choose an uploaded presentation to edit its links. Proclaim is not required on the laptop.
 
-Version 0.2.0 publishes destination changes and sends a heartbeat every five seconds when server publishing is enabled. The server restores Church Center after twenty seconds without a fresh update. The manual Church Center override restores fallback on the next successful update and resets when the app restarts. Public fallback is configured by the server's `CHURCH_CENTER_URL`; the app's local fallback field is for preview before connecting a server. Without server settings, the companion remains a local preview.
+The presentation Mac uploads item metadata and sends live slide status. The server resolves the current marker against the shared link library. Editing a shared URL takes effect for subsequent taps even before the booth sends another heartbeat. Remote editors never publish live state. Use only one live presentation Mac at a time; a previous publishing session expires after twenty seconds.
 
-The app starts monitoring when opened; it does not install a login item. Closing the window quits the app. The app is ad-hoc signed, not Developer ID signed or notarized; macOS may require explicit approval after transferring it to another Mac.
+## Links across weekly presentations
 
-## Link persistence
+**The marker is the identity**, not the presentation ID, item ID, title, or position. Duplicate last week's presentation and swap songs as usual. An unchanged `[tap:conference-2026]` continues using its saved URL even when Proclaim generates new IDs or the surrounding item title changes.
 
-Links are stored atomically in `~/Library/Application Support/Proclaim Tap/links.json` and can be exported from Settings. Keys use **presentation ID + item ID**, not titles or positions. This prevents accidental matches between repeated titles and separate services. Copies in pre-service, service, and post-service each have their own mapping. A duplicated weekly presentation may need its links reassigned; reusable destination groups and cross-week mapping are not implemented yet.
+- Markers contain 1–64 ASCII letters, digits, hyphens or underscores, beginning with a letter or digit. Matching ignores case.
+- Each item must have exactly one valid marker. Unmarked items, unknown markers, malformed/multiple markers, and unmapped items use Church Center.
+- Every slide in an item shares its marker. Reusing a marker intentionally shares its URL across items, pre/post-service copies, and presentations.
+- Renaming the marker itself creates a new identity. Use a new marker for a different event, such as `conference-2027`.
+- Removing an item from a presentation leaves its shared link available for other presentations. Clearing the URL in the app removes that marker's shared link everywhere.
+- There is no automatic title matching, content matching, or link expiration in this release.
 
-The app reads presentation data from `127.0.0.1:52195`. When publishing is enabled, it sends only the resolved destination URL and publisher protocol fields to your server over HTTPS. It does not upload presentation content or the full mapping list. The publish token is stored in macOS Keychain, outside the exported mappings. The UI's “Sync” fetches the on-air presentation from the local API; it does not trigger Proclaim cloud synchronization.
+Links and the latest thirty uploaded presentation snapshots persist in SQLite across app and server restarts. The live publishing lease deliberately does not survive a server restart; the public redirect stays at Church Center until fresh booth status arrives. Losing the booth heartbeat also restores fallback after twenty seconds.
+
+The app syncs shared data about every three seconds. Conflicting saves are rejected for review instead of silently overwriting another device. A read-only local cache supports browsing during outages; saving needs a server connection. Unsaved text remains in the current editor during a connection interruption but is not an offline edit queue or a draft saved across app restarts.
+
+The verified Proclaim API fetches **on-air presentations only**. A new presentation must be seen on air by the booth companion before it appears remotely. Uploaded presentations remain available when the booth Mac is off. Local Proclaim preparation on a second Mac is not automatically uploaded by Remote editor mode.
+
+## Migrating local links
+
+Existing 0.2.0 installations keep local mode until you enable cloud sync. Old clients can continue publishing to the upgraded server while you prepare the migration.
+
+1. Keep a copy of `~/Library/Application Support/Proclaim Tap/links.json` or use **Export local link mappings**.
+2. Open the existing mapped presentation on the booth Mac. Add markers to those same Proclaim items and allow the companion to sync.
+3. Enable cloud sync in Settings, then click **Import local links for this presentation**. Only locally mapped items with valid markers are imported. Conflicting URLs for the same marker reject the entire import; resolve those by assigning the desired shared URL manually.
+4. Verify the shared links and public redirect before a service. Repeat for any other locally mapped presentations you want to import.
+
+Local-mode assignments remain keyed by presentation ID + item ID and can need reassignment after duplication. Cloud mode uses only the server's marker links; it never silently substitutes an old local link. Tokens remain in each Mac's Keychain and are not included in exported mappings or the offline cache.
+
+The app requires macOS 13 or later. It is ad-hoc signed, not notarized. It starts monitoring/syncing when opened but does not install a login item. Closing its window quits it. Its manual **Use Church Center for every tap** override is available on the presentation Mac and resets when the app restarts. Demo slides are never uploaded or published.
 
 ## Verified API contract
 
@@ -63,8 +86,10 @@ These live booth checks are separate from the automated API-contract and routing
 
 ## Development validation
 
-The standalone API/routing checks and monitor integration checks passed on November 3, 2026. The monitor was tested against `scripts/mock-proclaim.py` for auto-sync, item changes, revision refresh, quick screens, off air, server errors, reconnection, pause, and cancellation. The universal binary contains both arm64 and x86_64 slices, and the bundle signature and Info.plist validate. Only the Apple silicon build was executed here.
+Run `npm test` in `server` for HTTP routing, authentication, heartbeat expiry, marker reuse across weekly IDs, editor permissions, conflict handling and SQLite restart persistence.
 
-To repeat the monitor checks on a development Mac without Proclaim running, start `python3 scripts/mock-proclaim.py /private/tmp/proclaim-tap-state.json` in one terminal and run `bash scripts/check-monitor.sh` in another. Stop the simulator afterward. The test fixture is clearly labeled and uses memory-only link settings in the test process.
+Run `bash scripts/check-cloud-editor.sh` for the actual Mac app model's remote-editor behavior, acknowledged saves, stale-edit rejection, offline cache and old-settings migration. Run `bash scripts/check-publisher.sh` for a Swift-to-Node integration test using a temporary local server and test credentials. The workflow runs these checks and validates the Linux service, Nginx configuration and Docker build.
 
-The initial companion was confirmed by the operator to pull live slides successfully. Automated checks cover the publisher protocol and server behavior. Docker is not installed in the local development environment; the GitHub workflow builds the container on Linux. Live server deployment remains operator-managed. Visual QA of the updated settings panel could not be completed here because the computer-use tool's macOS screen capture failed.
+To repeat the monitor regression checks on a development Mac without Proclaim running, start `python3 scripts/mock-proclaim.py /private/tmp/proclaim-tap-state.json` in one terminal and run `bash scripts/check-monitor.sh` in another. Stop the simulator afterward. It uses memory-only link settings and does not publish to the real server.
+
+The original local-monitor integration was confirmed on Proclaim 4.22. Test the new cloud workflow against the real booth presentation before a service, including duplicating a presentation and confirming that markers remain in the item titles. The native app and server automate URL routing; they do not alter or advance Proclaim slides.

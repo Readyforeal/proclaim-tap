@@ -4,6 +4,20 @@ import Security
 struct ServerSettings: Codable {
     var url = "https://tap.revivalomaha.org"
     var enabled = false
+    var cloudEnabled = true
+    var monitorLocal = true
+    init(url: String = "https://tap.revivalomaha.org", enabled: Bool = false, cloudEnabled: Bool = true, monitorLocal: Bool = true) {
+        self.url = url; self.enabled = enabled; self.cloudEnabled = cloudEnabled; self.monitorLocal = monitorLocal
+    }
+    enum CodingKeys: String, CodingKey { case url, enabled, cloudEnabled, monitorLocal }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        url = try c.decode(String.self, forKey: .url)
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        // Existing installations keep their local mappings until explicitly migrated.
+        cloudEnabled = try c.decodeIfPresent(Bool.self, forKey: .cloudEnabled) ?? false
+        monitorLocal = try c.decodeIfPresent(Bool.self, forKey: .monitorLocal) ?? true
+    }
 }
 
 enum TokenStore {

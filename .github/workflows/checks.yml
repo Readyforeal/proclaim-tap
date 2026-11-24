@@ -38,3 +38,8 @@ jobs:
       - uses: actions/checkout@v4
       - run: swift run TapChecks
       - run: swift build --product ProclaimTap
+      - run: bash scripts/check-cloud-editor.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: bash scripts/check-publisher.sh

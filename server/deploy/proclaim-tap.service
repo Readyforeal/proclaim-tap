@@ -8,6 +8,9 @@ User=proclaim-tap
 Group=proclaim-tap
 WorkingDirectory=/opt/proclaim-tap/server
 Environment=NODE_ENV=production
+Environment=DATA_DIR=/var/lib/proclaim-tap
+StateDirectory=proclaim-tap
+StateDirectoryMode=0700
 EnvironmentFile=/etc/proclaim-tap.env
 # Use the absolute path to your system-wide Node.js 22+ executable.
 ExecStart=/usr/bin/node /opt/proclaim-tap/server/src/main.js

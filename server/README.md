@@ -2,13 +2,13 @@
 
 Every NFC tag contains `https://tap.revivalomaha.org`. The public root returns a non-cacheable **302** to the current announcement URL. When there is no fresh announcement, it redirects to the configured Church Center homepage.
 
-The Mac companion sends authenticated updates and a heartbeat every five seconds. The default expiry is twenty seconds. Off-air, unmapped items, quick screens, pause, and the manual fallback override send `activeURL: null`, restoring Church Center immediately after the next successful update. App crashes, power loss, and internet failures expire automatically. Each tap is independent; a person already completing a form stays on that page.
+In cloud mode (0.3.0), the presentation Mac uploads item metadata and reports live slide identity. The server resolves `[tap:marker]` against its persistent link library. Remote editors can change shared links without publishing live slides. The Mac companion sends authenticated updates and a heartbeat every five seconds. The default expiry is twenty seconds. Off-air, unmapped items, quick screens, pause, and the manual fallback override restore Church Center after the next successful live-state update. Legacy 0.2.0 clients continue sending a resolved `activeURL` or `null`. App crashes, power loss, and internet failures expire automatically. Each tap is independent; a person already completing a form stays on that page.
 
 ## Deploy with Nginx and systemd (no Docker)
 
-Nginx handles HTTPS and forwards requests to a small Node process on `127.0.0.1:3000`. systemd starts that process at boot and restarts it if it crashes. There are no npm dependencies to install and no build step.
+Nginx handles HTTPS and forwards requests to a small Node process on `127.0.0.1:3000`. systemd starts that process at boot and restarts it if it crashes. There are no npm dependencies to install and no build step. SQLite is bundled with Node; the service stores its library in `/var/lib/proclaim-tap/links.sqlite`.
 
-These commands target Ubuntu/Debian with an existing Nginx installation and sudo access. Install **Node.js 22 or later system-wide** first, then check `node --version` and `command -v node`. The supplied service uses `/usr/bin/node`; if yours is elsewhere, change `ExecStart` before installing it. A Node installation under a user's home directory will not work with this service's `ProtectHome` setting.
+These commands target Ubuntu/Debian with an existing Nginx installation and sudo access. Install **Node.js 22.13 or later system-wide** first, then check `node --version` and `command -v node`. The supplied service uses `/usr/bin/node`; if yours is elsewhere, change `ExecStart` before installing it. A Node installation under a user's home directory will not work with this service's `ProtectHome` setting.
 
 ### 1. Get the repository
 
@@ -41,7 +41,7 @@ PORT=3000
 HOST=127.0.0.1
 ```
 
-Keep the same token for the companion's settings. Do not put it in NFC tags, URLs, Git, or public pages. systemd reads the root-owned environment file before starting the unprivileged process. The server refuses to start with a missing/placeholder token, a non-HTTPS fallback, or a fallback on its own origin.
+Keep the same publish token for the presentation Mac. To give a laptop permission to edit without permission to publish live state, generate another random token and add `EDITOR_TOKEN=...` to the same environment file. Use that second token on editor Macs. Do not put it in NFC tags, URLs, Git, or public pages. systemd reads the root-owned environment file before starting the unprivileged process. The server refuses to start with a missing/placeholder token, a non-HTTPS fallback, or a fallback on its own origin.
 
 If another application uses port 3000, choose an unused port here and change `proxy_pass` in the Nginx snippet to match.
 
@@ -112,19 +112,54 @@ curl -I http://127.0.0.1:3080/
 
 `.env` is ignored by Git and the Docker build. Compose binds host port **3080**, so point your HTTPS proxy to `127.0.0.1:3080` instead of 3000. For Nginx, change `proxy_pass` in the supplied snippet. An optional Caddy example is in `deploy/Caddyfile.example`. If the proxy itself runs in Docker, join the same Docker network and use `tap:3000` instead. Run either this deployment or the native service for a tap domain.
 
+## Upgrade an existing native installation to 0.3.0
+
+Upgrade the server before enabling cloud sync in the new Mac app. Existing 0.2.0 clients remain supported. In particular, reinstall the service unit: the old unit does not grant a writable database directory.
+
+```sh
+cd /opt/proclaim-tap
+git pull --ff-only
+/usr/bin/node --version
+# Must be 22.13 or later.
+sudo install -m 644 server/deploy/proclaim-tap.service /etc/systemd/system/proclaim-tap.service
+sudo install -m 644 server/deploy/nginx-proclaim-tap.conf /etc/nginx/snippets/proclaim-tap.conf
+```
+
+Preserve any custom Node path or port changes you made in those installed files. The updated service sets `DATA_DIR=/var/lib/proclaim-tap` and uses systemd `StateDirectory` to create it with the service account's ownership. The updated Nginx snippet allows presentation uploads up to 256 KiB; live publish bodies remain limited to 16 KiB by the application.
+
+Optionally generate an editor token with `openssl rand -hex 32` and add it as `EDITOR_TOKEN` using `sudoedit /etc/proclaim-tap.env`. Keep the existing `PUBLISH_TOKEN` unchanged.
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl restart proclaim-tap
+sudo nginx -t && sudo systemctl reload nginx
+curl -I https://tap.revivalomaha.org/
+curl https://tap.revivalomaha.org/healthz
+```
+
+The database starts empty. Existing local mappings are not automatically uploaded or lost; use the import workflow below after adding markers. Stop the old publisher before starting the new one; its lease may take twenty seconds to expire.
+
 ## Connect the Mac companion
 
-Install **Proclaim Tap 0.2.0 or later** from the repository's Releases page. Quit the previous app before replacing it. Existing announcement link mappings are retained.
+Install **Proclaim Tap 0.3.0 or later** from Releases. Quit the previous app before replacing it. The same universal app runs on the presentation Mac and your laptop.
 
-In the companion's gear menu:
+On the **presentation Mac**, open the gear menu:
 
-1. Set the redirect server address to `https://tap.revivalomaha.org` (no `/api/state` path).
-2. Paste the server's `PUBLISH_TOKEN` from `/etc/proclaim-tap.env` (or `.env` for Docker).
-3. Enable **Publish live destinations**, then **Save server settings**.
+1. Set the server address to `https://tap.revivalomaha.org` (no API path).
+2. Enter the `PUBLISH_TOKEN` from the server configuration.
+3. Choose **Presentation Mac**. Enable **Sync links and presentations with server** and **Publish live destinations**, then save.
+4. In Proclaim item titles, add markers such as `Giving [tap:giving]` and `Conference [tap:conference-2026]`. Go on air so the companion can fetch and upload the presentation.
+5. Select each marked item in Proclaim Tap and save its URL. To reuse existing local assignments, click **Import local links for this presentation** in Settings after adding markers to those same items.
 
-The token is stored in macOS Keychain; the URL and publishing preference are stored locally. The app shows acknowledgement or an error; it does not report a failed update as published. The server's `CHURCH_CENTER_URL` is authoritative for public fallback. The old local Church Center field is only for preview before a server connection is established.
+On the **laptop**, enter the server URL and `EDITOR_TOKEN`, choose **Remote editor**, enable cloud sync and save. Choose an uploaded presentation from the presentation picker. Proclaim is not required on this Mac. It never publishes live state. Both tokens can read/edit links; only the publish token can upload presentation snapshots or report live state. Editor tokens are shared by editor devices in this release; rotating one revokes all devices using it. Per-device pairing/accounts are not implemented.
 
-Only one companion should publish at a time. A second instance receives HTTP 409 while the first one's heartbeat is fresh. On app restart, a new publisher ID may wait up to twenty seconds for the previous lease to expire. Stop the other instance rather than enabling multiple booth Macs. Demo slides are never published, although an enabled publisher sends fallback while in demo mode.
+Cloud rules use the marker alone: duplicating presentations, changing item IDs, reordering items, and changing the rest of the title preserve the link. Changing the marker changes its identity. Unmarked/unknown/malformed/multiple-marker items use Church Center. Markers accept 1–64 letters, digits, hyphens or underscores, starting with a letter or digit, and ignore case. Clearing a shared URL removes it for every item using that marker. There is no automatic expiration; use distinct keys for distinct events.
+
+The server stores the latest thirty presentation snapshots. The verified API only exposes the on-air presentation; a new presentation must be observed by the booth companion before a laptop can browse it. Previously uploaded presentations can be edited while the booth Mac is off. Changes synchronize about every three seconds; the server applies a saved URL to subsequent taps immediately. Conflicting edits require review. Offline browsing uses a local cache, but saves require connectivity and there is no durable offline draft queue.
+
+Migration imports only locally mapped items with markers in the currently selected presentation. Conflicting URLs for the same marker abort the entire import; assign the desired URL manually. Export/back up local `links.json` before migrating. Existing app settings stay in local mode until cloud sync is explicitly enabled. The server's `CHURCH_CENTER_URL` remains authoritative; tokens stay in macOS Keychain.
+
+Only one companion should publish at a time. A second receives HTTP 409 while the first one's heartbeat is fresh. Demo slides never upload or publish; an enabled presentation Mac sends fallback while in demo mode.
 
 ## Validate before a service
 
@@ -134,6 +169,9 @@ Only one companion should publish at a time. A second instance receives HTTP 409
 - Quit the companion and wait twenty seconds; verify Church Center.
 - Restart the server; it must start at Church Center until a fresh companion update arrives.
 - Try the companion's manual **Use Church Center for every tap** override.
+- Duplicate the presentation, keep a marker, and verify the destination remains assigned despite new IDs.
+- Edit that marker's URL from the laptop and confirm a fresh tap uses it.
+- Restart the server and verify the shared link remains available while live state waits for a fresh heartbeat.
 
 The simulator and automated tests cover the protocol, but these deployment checks verify your DNS, TLS, proxy and booth network together.
 
@@ -152,9 +190,18 @@ Editing `/etc/proclaim-tap.env` also requires a service restart. If you update t
 
 For Docker, run `git pull --ff-only`, then `docker compose up -d --build` from the `server` directory. View logs with `docker compose logs --tail=100 tap`.
 
-There is no database or volume to migrate. The only live state is an expiring in-memory lease; it deliberately resets to fallback on restart. Back up `/etc/proclaim-tap.env` (or Docker's `.env`) securely and the booth Mac's link mappings separately. Run **one server process/replica per tap domain**; multiple replicas would have independent live state.
+The SQLite library is durable; the live heartbeat lease is in memory and deliberately resets to fallback on restart. Native data lives at `/var/lib/proclaim-tap/links.sqlite`; Docker stores it in the `tap_data` volume. Do not remove this directory or volume during upgrades. Back up the database and `/etc/proclaim-tap.env` (or Docker's `.env`) securely, with a copy outside this server. The foreground process uses `DATA_DIR` or `./data`.
 
-No phone identifiers, tap history, or presentation content are stored by this service. It receives only the destination URL and publisher protocol fields. Your external proxy may have its own access logs. Keep booth/server clocks synchronized: updates older than ten seconds or more than five seconds in the future are rejected. The companion never follows HTTP redirects on authenticated publish requests.
+For a consistent native database backup, install the `sqlite3` command if needed (`sudo apt install sqlite3`) and use its backup operation instead of copying an active WAL database:
+
+```sh
+sudo install -d -m 700 /var/backups/proclaim-tap
+sudo sqlite3 /var/lib/proclaim-tap/links.sqlite ".backup '/var/backups/proclaim-tap/links.sqlite'"
+```
+
+To restore, stop `proclaim-tap`, restore the backup to the data directory with ownership `proclaim-tap:proclaim-tap`, and start the service. Preserve/move aside the whole existing database directory including WAL files before restoring. Reconnect clients through Settings after restoring an older library revision. Run **one server process/replica per tap domain**; multiple replicas would have independent live state.
+
+No phone identifiers, tap history, or presentation content are stored by this service. Cloud mode receives presentation/item titles, IDs, order, slide indices, marker URLs and live status. It does not upload slide images, presentation files, lyrics or speaker notes. Legacy mode receives only a destination URL and publisher protocol fields. Your external proxy may have its own access logs. Keep booth/server clocks synchronized: updates older than ten seconds or more than five seconds in the future are rejected. The companion never follows HTTP redirects on authenticated publish requests.
 
 For a temporary foreground run on a development machine, copy `.env.example` to `.env`, fill in its values, and run `npm start` from `server`. The systemd deployment reads `/etc/proclaim-tap.env` instead.
 
@@ -165,9 +212,11 @@ For a temporary foreground run on a development machine, copy `.env.example` to 
 | `GET /`, `HEAD /` | None | Temporary redirect to current destination or fallback |
 | `GET /healthz` | None | Service health |
 | `GET /api/state` | Bearer token | Current effective destination and lease status |
-| `PUT /api/state` | Bearer token | Update destination and renew the lease |
+| `PUT /api/state` | Publish token | Report live state (v2) or a legacy destination; renew the lease |
+| `GET /api/library` | Publish or editor token | Shared links, presentation snapshots and current live status |
+| `POST /api/library` | Publish or editor token | Conditional link edits/imports; presentation uploads require publish token |
 
-Example update body:
+Legacy update body (still supported):
 
 ```json
 {
@@ -181,3 +230,7 @@ Example update body:
 Use the actual current UTC timestamp. Send `null` for `activeURL` to restore fallback. Sequence numbers increase within each publisher session; stale/replayed updates are rejected. Responses contain `destination`, `fallbackURL`, `mode`, `connected`, `expiresAt`, and `ttlSeconds`. HTTPS destinations with credentials or on the tap server's own origin are rejected.
 
 Run `npm test` to exercise redirects, cache headers, heartbeat renewal/expiry, fallback, authentication, URL validation, stale updates, publisher conflicts, ordering, and restart behavior using real localhost HTTP requests.
+
+Cloud live updates use `protocolVersion: 2`, `onAir`, `forceFallback`, and `presentationStatus` in place of `activeURL`, alongside the same publisher ID, sequence and timestamp. The server checks the uploaded presentation revision, item and slide index before resolving its marker. Link edits do not extend the heartbeat lease.
+
+Library mutations require the latest `baseRevision`, an `operation` (`saveLink`, `deleteLink`, `importLinks`, or `savePresentation`), and the corresponding `rule`, `rules`, or `presentation`. Rules have `key`, `title` and `url`. Revision conflicts return 409 without saving any part of the mutation. Back up the database before a future schema migration; the 0.3.0 schema is the first persistent library.
