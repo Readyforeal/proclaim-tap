@@ -157,7 +157,7 @@ Cloud rules use the marker alone: duplicating presentations, changing item IDs, 
 
 The server stores the latest thirty presentation snapshots. The verified API only exposes the on-air presentation; a new presentation must be observed by the booth companion before a laptop can browse it. Previously uploaded presentations can be edited while the booth Mac is off. Changes synchronize about every three seconds; the server applies a saved URL to subsequent taps immediately. Conflicting edits require review. Offline browsing uses a local cache, but saves require connectivity and there is no durable offline draft queue.
 
-Migration imports only locally mapped items with markers in the currently selected presentation. Conflicting URLs for the same marker abort the entire import; assign the desired URL manually. Export/back up local `links.json` before migrating. Existing app settings stay in local mode until cloud sync is explicitly enabled. The server's `CHURCH_CENTER_URL` remains authoritative; tokens stay in macOS Keychain.
+Migration imports only locally mapped items with markers in the currently selected presentation. Conflicting URLs for the same marker abort the entire import; assign the desired URL manually. Export/back up local `links.json` before migrating. Existing app settings stay in local mode until cloud sync is explicitly enabled. The server's `CHURCH_CENTER_URL` remains authoritative; tokens stay on each Mac, encrypted with its macOS Keychain.
 
 Only one companion should publish at a time. A second receives HTTP 409 while the first one's heartbeat is fresh. Demo slides never upload or publish; an enabled presentation Mac sends fallback while in demo mode.
 

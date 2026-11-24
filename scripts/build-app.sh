@@ -1,32 +1,47 @@
 #!/bin/bash
+# Builds dist/Proclaim Tap.app and dist/Proclaim-Tap.zip. ARCH=arm64|x64|universal (default universal).
 set -euo pipefail
-cd "$(dirname "$0")/.."
-export CLANG_MODULE_CACHE_PATH="$PWD/.build/clang-cache"
-export SWIFTPM_MODULECACHE_OVERRIDE="$PWD/.build/swift-cache"
-swift build -c release --disable-sandbox --product ProclaimTap --triple arm64-apple-macosx13.0
-arm_dir=$(swift build -c release --disable-sandbox --triple arm64-apple-macosx13.0 --show-bin-path)
-swift build -c release --disable-sandbox --product ProclaimTap --triple x86_64-apple-macosx13.0
-intel_dir=$(swift build -c release --disable-sandbox --triple x86_64-apple-macosx13.0 --show-bin-path)
-app="$PWD/dist/Proclaim Tap.app"
-mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-lipo -create "$arm_dir/ProclaimTap" "$intel_dir/ProclaimTap" -output "$app/Contents/MacOS/ProclaimTap"
-cat > "$app/Contents/Info.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>CFBundleExecutable</key><string>ProclaimTap</string>
-<key>CFBundleIdentifier</key><string>org.revivalomaha.proclaim-tap</string>
-<key>CFBundleName</key><string>Proclaim Tap</string>
-<key>CFBundleDisplayName</key><string>Proclaim Tap</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.3.0</string>
-<key>CFBundleVersion</key><string>3</string>
-<key>LSMinimumSystemVersion</key><string>13.0</string>
-<key>NSHighResolutionCapable</key><true/>
-<key>NSLocalNetworkUsageDescription</key><string>Read the live presentation from Proclaim on this Mac.</string>
-<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
-</dict></plist>
-PLIST
-codesign --force --sign - "$app"
-ditto -c -k --sequesterRsrc --keepParent "$app" "$PWD/dist/Proclaim-Tap.zip"
+cd "$(dirname "$0")/../app"
+arch="${ARCH:-universal}"
+icon_source="$PWD/../Proclaim Tap.icon"
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+# Static icon for macOS 13–15 and for builds without Xcode. Regenerated from the Icon Composer
+# document whenever Icon Composer is installed; otherwise the committed build/icon.icns is used.
+ictool="/Applications/Icon Composer.app/Contents/Executables/ictool"
+if [ -x "$ictool" ]; then
+  "$ictool" "$icon_source" --export-image --output-file "$work/full.png" --platform macOS --rendition Default --width 1024 --height 1024 --scale 1 > /dev/null
+  # Icon Composer renders edge to edge; classic .icns artwork sits on an 824pt grid inside 1024.
+  sips -z 824 824 "$work/full.png" --out "$work/art.png" > /dev/null
+  sips -p 1024 1024 "$work/art.png" --out "$work/master.png" > /dev/null
+  mkdir "$work/icon.iconset"
+  for size in 16 32 128 256 512; do
+    sips -z $size $size "$work/master.png" --out "$work/icon.iconset/icon_${size}x${size}.png" > /dev/null
+    sips -z $((size * 2)) $((size * 2)) "$work/master.png" --out "$work/icon.iconset/icon_${size}x${size}@2x.png" > /dev/null
+  done
+  mkdir -p build
+  iconutil -c icns "$work/icon.iconset" -o build/icon.icns
+fi
+
+# Light/dark/tinted icon for macOS 26 and later. The packager compiles the Icon Composer document when it sits
+# beside the .icns, but that needs Xcode 26+'s asset compiler; Command Line Tools alone do not have it.
+cp build/icon.icns "$work/icon.icns"
+if actool --version > /dev/null 2>&1; then
+  cp -R "$icon_source" "$work/icon.icon"
+else
+  echo "Note: Xcode not found, so this build has the static icon only. Install Xcode for the light/dark icon."
+fi
+
+npm ci
+rm -rf ../dist
+npx electron-packager . "Proclaim Tap" --platform=darwin --arch="$arch" --out="$work/out" --asar \
+  --icon="$work/icon.icns" --app-bundle-id=org.revivalomaha.proclaim-tap --build-version=4 \
+  --ignore='^/(test|build)($|/)'
+mkdir -p ../dist
+mv "$work/out/Proclaim Tap-darwin-$arch/Proclaim Tap.app" ../dist/
+app="$PWD/../dist/Proclaim Tap.app"
+
+codesign --force --deep --sign - "$app"
+ditto -c -k --sequesterRsrc --keepParent "$app" "$PWD/../dist/Proclaim-Tap.zip"
 echo "Built: $app"

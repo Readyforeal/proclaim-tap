@@ -36,10 +36,14 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - run: swift run TapChecks
-      - run: swift build --product ProclaimTap
-      - run: bash scripts/check-cloud-editor.sh
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: bash scripts/check-publisher.sh
+      - run: npm ci && npm test
+        working-directory: app
+      # The runner's Xcode compiles the Icon Composer icon, so this artifact has the light/dark app icon.
+      - run: bash scripts/build-app.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Proclaim-Tap
+          path: dist/Proclaim-Tap.zip
