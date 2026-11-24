@@ -1,10 +1,10 @@
 # Proclaim Tap
 
-A native macOS companion and self-hosted redirect server for Revival's presentation-aware NFC links. Every NFC tag holds one permanent URL; Proclaim's live announcement chooses the destination.
+A macOS companion app and self-hosted redirect server for Revival's presentation-aware NFC links. Every NFC tag holds one permanent URL; Proclaim's live announcement chooses the destination.
 
 **[Server deployment instructions](server/README.md)** · **[Mac app downloads](https://github.com/Readyforeal/proclaim-tap/releases)**
 
-The companion requires macOS 13 or later. The distributable is a universal app for Apple silicon and Intel Macs; no Node, Python, or additional runtime is required on the booth Mac. The server runs directly on Node.js 22.13+ behind Nginx, with a supplied systemd service, SQLite persistence, and no npm dependencies. Docker Compose is also available as an optional deployment.
+The companion requires macOS 13 or later. The distributable is a universal Electron app for Apple silicon and Intel Macs with its runtime bundled; nothing else needs installing on the booth Mac. The server runs directly on Node.js 22.13+ behind Nginx, with a supplied systemd service, SQLite persistence, and no npm dependencies. Docker Compose is also available as an optional deployment.
 
 ## Set up cloud links (0.3.0)
 
@@ -45,7 +45,7 @@ Existing 0.2.0 installations keep local mode until you enable cloud sync. Old cl
 3. Enable cloud sync in Settings, then click **Import local links for this presentation**. Only locally mapped items with valid markers are imported. Conflicting URLs for the same marker reject the entire import; resolve those by assigning the desired shared URL manually.
 4. Verify the shared links and public redirect before a service. Repeat for any other locally mapped presentations you want to import.
 
-Local-mode assignments remain keyed by presentation ID + item ID and can need reassignment after duplication. Cloud mode uses only the server's marker links; it never silently substitutes an old local link. Tokens remain in each Mac's Keychain and are not included in exported mappings or the offline cache.
+Local-mode assignments remain keyed by presentation ID + item ID and can need reassignment after duplication. Cloud mode uses only the server's marker links; it never silently substitutes an old local link. Each Mac's token is stored encrypted with a key held in its macOS Keychain and is not included in exported mappings or the offline cache. Upgrading from 0.3.0 keeps saved links and settings, but the token must be entered once more in Settings.
 
 The app requires macOS 13 or later. It is ad-hoc signed, not notarized. It starts monitoring/syncing when opened but does not install a login item. Closing its window quits it. Its manual **Use Church Center for every tap** override is available on the presentation Mac and resets when the app restarts. Demo slides are never uploaded or published.
 
@@ -63,14 +63,18 @@ Reference implementation: [Companion maintainer's remote API branch](https://git
 
 ## Build and test
 
-Install Apple's Command Line Tools, then run:
+Install Node.js 22.13 or later, then run:
 
 ```sh
 bash scripts/build-app.sh
-CLANG_MODULE_CACHE_PATH="$PWD/.build/clang-cache" SWIFTPM_MODULECACHE_OVERRIDE="$PWD/.build/swift-cache" swift run --disable-sandbox TapChecks
+(cd app && npm test)
 ```
 
-The build produces `dist/Proclaim Tap.app` and `dist/Proclaim-Tap.zip`. Launch with `--demo` for a sample presentation. Checks use a standalone Swift executable and a mock URL protocol, so they run with Command Line Tools without requiring Xcode's XCTest framework.
+The build produces `dist/Proclaim Tap.app` and `dist/Proclaim-Tap.zip`; set `ARCH=arm64` or `ARCH=x64` for a smaller single-architecture build. During development, `npm start` in `app` runs the app directly and `npm run demo` opens a sample presentation.
+
+The app icon is the Icon Composer document `Proclaim Tap.icon`. With Xcode 26 or later installed, the build compiles it so the icon follows light, dark and tinted appearance on macOS 26 and later. Without Xcode the app gets a static icon exported from the same document (`app/build/icon.icns`). The GitHub workflow builds with Xcode and uploads the result as the `Proclaim-Tap` artifact.
+
+The interface's colours, spacing and components are defined in `app/ui/styles.css`.
 
 ## Booth acceptance check
 
@@ -88,8 +92,6 @@ These live booth checks are separate from the automated API-contract and routing
 
 Run `npm test` in `server` for HTTP routing, authentication, heartbeat expiry, marker reuse across weekly IDs, editor permissions, conflict handling and SQLite restart persistence.
 
-Run `bash scripts/check-cloud-editor.sh` for the actual Mac app model's remote-editor behavior, acknowledged saves, stale-edit rejection, offline cache and old-settings migration. Run `bash scripts/check-publisher.sh` for a Swift-to-Node integration test using a temporary local server and test credentials. The workflow runs these checks and validates the Linux service, Nginx configuration and Docker build.
+Run `npm test` in `app` for routing, markers, the Proclaim and server clients, and the app model itself: the monitor against a local stand-in for Proclaim (slide changes, revisions, quick screens, off air, reconnects, pause), remote-editor behavior (acknowledged saves, stale-edit rejection, offline cache, old-settings migration), and publishing against the real server code with test credentials. The workflow runs these checks and validates the Linux service, Nginx configuration and Docker build.
 
-To repeat the monitor regression checks on a development Mac without Proclaim running, start `python3 scripts/mock-proclaim.py /private/tmp/proclaim-tap-state.json` in one terminal and run `bash scripts/check-monitor.sh` in another. Stop the simulator afterward. It uses memory-only link settings and does not publish to the real server.
-
-The original local-monitor integration was confirmed on Proclaim 4.22. Test the new cloud workflow against the real booth presentation before a service, including duplicating a presentation and confirming that markers remain in the item titles. The native app and server automate URL routing; they do not alter or advance Proclaim slides.
+The original local-monitor integration was confirmed on Proclaim 4.22. Test the new cloud workflow against the real booth presentation before a service, including duplicating a presentation and confirming that markers remain in the item titles. The app and server automate URL routing; they do not alter or advance Proclaim slides.

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+<title>Proclaim Tap</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<svg hidden>
+  <symbol id="i-gear" viewBox="0 0 16 16"><path d="M2.5 4.5h6.5M13 4.5h.5M2.5 11.5h.5M7 11.5h6.5"/><circle cx="11" cy="4.5" r="1.8"/><circle cx="5" cy="11.5" r="1.8"/></symbol>
+  <symbol id="i-sync" viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 0 1-9.6 3.7M2.5 8a5.5 5.5 0 0 1 9.6-3.7"/><path d="M12.3 1.8v2.7H9.6M3.7 14.2v-2.7h2.7"/></symbol>
+  <symbol id="i-link" viewBox="0 0 16 16"><path d="M6.8 9.2a3 3 0 0 0 4.2 0l2.1-2.1a3 3 0 0 0-4.2-4.2l-.9.9"/><path d="M9.2 6.8a3 3 0 0 0-4.2 0L2.9 8.9a3 3 0 0 0 4.2 4.2l.9-.9"/></symbol>
+  <symbol id="i-open" viewBox="0 0 16 16"><path d="M6.5 3.5h-3v9h9v-3M9.5 2.5h4v4M13.5 2.5 7.5 8.5"/></symbol>
+  <symbol id="i-home" viewBox="0 0 16 16"><path d="M2.5 7.5 8 2.5l5.5 5v6h-3.7v-3.7H6.2v3.7H2.5z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 16 16"><path d="M5.5 3.5v9M10.5 3.5v9"/></symbol>
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.5 8z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2"/><path d="m10.2 10.2 3.3 3.3"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.2 14.3 13H1.7zM8 6.5v3.2M8 11.4v.1"/></symbol>
+  <symbol id="i-tap" viewBox="0 0 16 16"><path d="M5.2 10.2a4 4 0 0 1 5.6 0M3.1 8a7 7 0 0 1 9.8 0M1.2 5.8a9.7 9.7 0 0 1 13.6 0"/><circle cx="8" cy="12.6" r=".6"/></symbol>
+  <symbol id="i-screen" viewBox="0 0 16 16"><rect x="1.8" y="2.8" width="12.4" height="8.4" rx="1.2"/><path d="M5.5 13.8h5"/></symbol>
+</svg>
+
+<header class="toolbar">
+  <div class="brand">Proclaim Tap</div>
+  <div class="toolbar-actions">
+    <span id="status" class="pill" role="status"></span>
+    <span id="role-label" class="muted" hidden>Remote editor</span>
+    <button id="monitor" class="btn" data-action="monitor"></button>
+    <button class="btn btn-icon" data-action="settings" aria-label="Settings" title="Server connection, cloud links, and device role">
+      <svg class="icon" aria-hidden="true"><use href="#i-gear"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <aside class="sidebar" aria-label="Presentation">
+    <div class="sidebar-head">
+      <div class="split">
+        <span class="eyebrow">Presentation</span>
+        <button id="sync" class="btn btn-quiet btn-small" data-action="sync">
+          <svg class="icon" aria-hidden="true"><use href="#i-sync"/></svg><span id="sync-label">Sync</span>
+        </button>
+      </div>
+      <select id="picker" class="field" aria-label="Presentation" hidden></select>
+      <h1 id="presentation-title" class="title"></h1>
+      <p id="presentation-meta" class="caption"></p>
+      <label class="search">
+        <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <input id="search" class="field" type="search" placeholder="Find an announcement" aria-label="Find an announcement">
+      </label>
+    </div>
+    <div id="list" class="list" role="listbox" aria-label="Presentation items"></div>
+  </aside>
+
+  <section class="detail" aria-label="Live status and link editor">
+    <div class="detail-inner">
+      <article class="panel flow">
+        <div id="live" class="flow-stage"></div>
+        <div class="flow-join" aria-hidden="true"><svg class="icon"><use href="#i-tap"/></svg></div>
+        <div id="destination" class="flow-target"></div>
+        <div class="flow-foot">
+          <label id="force-row" class="switch">
+            <input id="force" type="checkbox" role="switch">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span>Use Church Center for every tap</span>
+          </label>
+          <div id="server-notes" class="notes"></div>
+        </div>
+      </article>
+
+      <article id="editor" class="panel" hidden>
+        <div class="split">
+          <span class="eyebrow">Selected item</span>
+          <button id="demo-show" class="btn btn-small" data-action="demo-show" hidden>Show on demo screen</button>
+        </div>
+        <h2 id="edit-title" class="title"></h2>
+        <p id="edit-meta" class="caption"></p>
+        <form id="link-form" class="link-form">
+          <input id="link-input" class="field mono" type="text" inputmode="url" placeholder="https://…" aria-label="Tap link for this item" aria-describedby="edit-hint link-error">
+          <button id="link-save" class="btn btn-primary" type="submit">Save link</button>
+        </form>
+        <p id="link-error" class="caption error" hidden>Enter a full HTTPS link, or leave this empty.</p>
+        <button id="link-reload" class="btn-text" data-action="reload-link" hidden>Reload saved link</button>
+        <p id="edit-hint" class="caption"></p>
+        <div id="cloud-notes" class="notes"></div>
+      </article>
+
+      <div id="storage-error" class="banner error" role="alert" hidden></div>
+    </div>
+  </section>
+</main>
+
+<footer class="statusbar">
+  <span id="source"></span>
+  <span id="last-response"></span>
+</footer>
+
+<dialog id="settings" class="sheet" aria-labelledby="settings-title">
+  <form id="settings-form" method="dialog">
+    <header class="sheet-head"><h2 id="settings-title" class="title">Settings</h2></header>
+    <div class="sheet-body">
+      <section class="group">
+        <h3 class="eyebrow">This Mac</h3>
+        <div class="segmented" role="radiogroup" aria-label="This Mac">
+          <label><input type="radio" name="role" value="booth"><span>Presentation Mac</span></label>
+          <label><input type="radio" name="role" value="editor"><span>Remote editor</span></label>
+        </div>
+        <p class="caption">The presentation Mac runs Proclaim and reports the live slide. A remote editor only edits shared links.</p>
+      </section>
+      <section class="group">
+        <h3 class="eyebrow">Redirect server</h3>
+        <label class="stack"><span class="label">Server address</span>
+          <input id="set-url" class="field mono" type="text" inputmode="url" placeholder="https://tap.revivalomaha.org"></label>
+        <label class="stack"><span class="label">Device token</span>
+          <input id="set-token" class="field mono" type="password" autocomplete="off" placeholder="Leave blank to keep the saved token"></label>
+        <p class="caption">Use the publish token on the presentation Mac and an editor token on a laptop. Stored encrypted with the macOS Keychain.</p>
+        <label class="switch"><input id="set-cloud" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span>
+          <span>Sync links and presentations with server</span></label>
+        <label class="switch"><input id="set-publish" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span>
+          <span>Publish live destinations</span></label>
+        <p id="set-error" class="caption error" role="alert" hidden></p>
+        <div><button class="btn btn-primary" type="button" data-action="save-server">Save server settings</button></div>
+      </section>
+      <section class="group">
+        <h3 class="eyebrow">Local Church Center preview</h3>
+        <p class="caption">Used before a server is connected. Once connected, the server's fallback address is shown instead.</p>
+        <div class="link-form">
+          <input id="set-fallback" class="field mono" type="text" inputmode="url" placeholder="https://…" aria-label="Church Center address">
+          <button class="btn" type="button" data-action="save-fallback">Save</button>
+        </div>
+        <p id="set-fallback-error" class="caption error" hidden>Enter a full HTTPS link, or leave this empty.</p>
+      </section>
+      <section class="group">
+        <h3 class="eyebrow">Local links</h3>
+        <p class="caption">Importing copies this presentation's local links to the server for items that have a <code>[tap:marker]</code>. Conflicting markers reject the whole import.</p>
+        <div class="row-actions">
+          <button id="set-import" class="btn" type="button" data-action="import">Import local links</button>
+          <button class="btn" type="button" data-action="export">Export local links…</button>
+        </div>
+        <div id="set-cloud-notes" class="notes"></div>
+      </section>
+    </div>
+    <footer class="sheet-foot"><button class="btn btn-primary" type="button" data-action="close-settings">Done</button></footer>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>

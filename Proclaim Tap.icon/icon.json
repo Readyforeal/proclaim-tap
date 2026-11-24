@@ -1,0 +1,114 @@
+{
+  "fill-specializations" : [
+    {
+      "value" : "system-light"
+    },
+    {
+      "appearance" : "dark",
+      "value" : "system-dark"
+    }
+  ],
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "linear-gradient" : [
+                  "display-p3:0.27783,0.30737,0.92041,1.00000",
+                  "display-p3:0.15149,0.14380,0.19214,1.00000"
+                ],
+                "orientation" : {
+                  "start" : {
+                    "x" : 0.49999999999999983,
+                    "y" : 0.18703876947726503
+                  },
+                  "stop" : {
+                    "x" : 0.49999999999999983,
+                    "y" : 0.9511523243339455
+                  }
+                }
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "linear-gradient" : [
+                  "display-p3:0.85938,0.96875,0.97070,1.00000",
+                  "display-p3:0.61572,0.96094,0.92480,1.00000"
+                ],
+                "orientation" : {
+                  "start" : {
+                    "x" : 0.49999999999999983,
+                    "y" : 0.18703876947726503
+                  },
+                  "stop" : {
+                    "x" : 0.49999999999999983,
+                    "y" : 0.9511523243339455
+                  }
+                }
+              }
+            }
+          ],
+          "image-name" : "Image 2.png",
+          "name" : "Image 2",
+          "position" : {
+            "scale" : 2.23,
+            "translation-in-points" : [
+              0,
+              -134
+            ]
+          }
+        },
+        {
+          "blend-mode-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : "normal"
+            }
+          ],
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.50732,0.94971,0.68604,1.00000",
+              "display-p3:0.47437,0.67285,0.94824,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.03333265316261641,
+                "y" : 0.04988036881419179
+              },
+              "stop" : {
+                "x" : 0.9729108704292527,
+                "y" : 1
+              }
+            }
+          },
+          "image-name" : "Image.png",
+          "name" : "Image",
+          "position" : {
+            "scale" : 2.38,
+            "translation-in-points" : [
+              0,
+              445
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
